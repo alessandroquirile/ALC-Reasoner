@@ -30,11 +30,13 @@ class Node:
         - ¬⊤ ∈ L(x)
         - {C, ¬C} ⊆ L(x)
         """
+        # Clash: ⊥ ∈ L(x) or ¬⊤ ∈ L(x)
         if Bottom() in self.labels or Negation(Top()) in self.labels:
             return True
 
         for label in self.labels:
             match label:
+                # Clash: {C, ¬C} ⊆ L(x)
                 case Negation(concept):
                     if concept in self.labels:
                         return True
@@ -46,10 +48,11 @@ class Node:
     def is_blocked(self) -> bool:
         """
         Subset Blocking Rule:
-        x_j is blocked by x_i if L(x_j) ⊆ L(x_i) and x_i is an ancestor of x_j.
+        xⱼ is blocked by xᵢ iff L(xⱼ) ⊆ L(xᵢ) and xᵢ is an ancestor of xⱼ.
         """
         current_ancestor = self.ancestor
         while current_ancestor:
+            # Check L(xⱼ) ⊆ L(xᵢ)
             if self.labels.issubset(current_ancestor.labels):
                 self.blocked_by = current_ancestor
                 return True

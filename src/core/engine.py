@@ -1,6 +1,6 @@
 from typing import Set, Dict, Any, Optional
 
-from src.core.concept import Concept, AtomicConcept, Negation, Intersection, Union, Existential, Universal
+from src.core.concept import Concept, AtomicConcept, Intersection, Union, Existential, Universal
 from src.core.node import Node
 
 
@@ -16,7 +16,7 @@ class TableauEngine:
     - ¬ (Negation): Negation(C)
     - ⊤ (Top): Top()
     - ⊥ (Bottom): Bottom()
-    - Optional TBox GCIs: C ⊑ D (handled via Union(Negation(C), D))
+    - TBox GCIs: C ⊑ D (handled via Union(Negation(C), D))
     """
 
     def __init__(self, tbox: Set[Concept]):
@@ -25,6 +25,9 @@ class TableauEngine:
         self.root: Optional[Node] = None
 
     def create_node(self, concept: Optional[Concept] = None, ancestor: Optional[Node] = None) -> Node:
+        """
+        Creates a new node in the tableau.
+        """
         self.node_count += 1
         node = Node(f"x{self.node_count}", ancestor)
         if concept:
@@ -53,68 +56,98 @@ class TableauEngine:
         if node.is_blocked():
             return True
 
-        # Rule Selection using Pattern Matching
         for label in list(node.labels):
             match label:
-                # ⊓-rule (Deterministic Intersection)
-                case Intersection(left, right):
-                    if left not in node.labels or right not in node.labels:
-                        node.labels.add(left)
-                        node.labels.add(right)
-                        return self.expand(node)
+                case Intersection():
+                    result = self._apply_intersection_rule(node, label)
+                case Union():
+                    result = self._apply_union_rule(node, label)
+                case Universal():
+                    result = self._apply_universal_rule(node, label)
+                case Existential():
+                    result = self._apply_existential_rule(node, label)
+                case _:
+                    result = None
 
-                # ⊔-rule (Non-deterministic Union)
-                case Union(left, right):
-                    if left not in node.labels and right not in node.labels:
-                        orig_labels = node.labels.copy()
-                        node.labels.add(left)
-                        if self.expand(node):
-                            return True
-                        # Backtrack
-                        node.labels = orig_labels
-                        node.labels.add(right)
-                        return self.expand(node)
-
-                # ∀-rule (Universal Restriction)
-                case Universal(role, concept):
-                    if role in node.successors:
-                        changed = False
-                        for successor in node.successors[role]:
-                            if concept not in successor.labels:
-                                successor.labels.add(concept)
-                                changed = True
-                        if changed:
-                            # Re-verify all affected successors
-                            for successor in node.successors[role]:
-                                if not self.expand(successor):
-                                    return False
-
-                # ∃-rule (Existential Restriction)
-                case Existential(role, concept):
-                    exists_satisfied = False
-                    if role in node.successors:
-                        for succ in node.successors[role]:
-                            if concept in succ.labels:
-                                exists_satisfied = True
-                                break
-
-                    if not exists_satisfied:
-                        new_node = self.create_node(ancestor=node)
-                        new_node.labels.add(concept)
-                        # Propagate existing ∀-restrictions to the new successor
-                        for l in node.labels:
-                            match l:
-                                case Universal(r, c) if r == role:
-                                    new_node.labels.add(c)
-
-                        if role not in node.successors:
-                            node.successors[role] = []
-                        node.successors[role].append(new_node)
-
-                        if not self.expand(new_node):
-                            return False
+            if result is not None:
+                return result
 
         return True
+
+    def _apply_intersection_rule(self, node: Node, label: Intersection) -> Optional[bool]:
+        """
+        Apply the ⊓-rule (Deterministic Intersection).
+        Formal: If (C ⊓ D) ∈ L(x) and {C, D} ⊈ L(x), then L(x) = L(x) ∪ {C, D}.
+        """
+        if not {label.left, label.right}.issubset(node.labels):
+            node.labels.update({label.left, label.right})
+            return self.expand(node)
+        return None
+
+    def _apply_union_rule(self, node: Node, label: Union) -> Optional[bool]:
+        """
+        Apply the ⊔-rule (Non-deterministic Union).
+        Formal: If (C ⊔ D) ∈ L(x) and {C, D} ∩ L(x) = ∅, then L(x) = L(x) ∪ {C} or L(x) = L(x) ∪ {D}.
+        """
+        if {label.left, label.right}.isdisjoint(node.labels):
+            orig_labels = node.labels.copy()
+            # Try C branch
+            node.labels.add(label.left)
+            if self.expand(node):
+                return True
+            # Backtrack and try D branch
+            node.labels = orig_labels
+            node.labels.add(label.right)
+            return self.expand(node)
+        return None
+
+    def _apply_universal_rule(self, node: Node, label: Universal) -> Optional[bool]:
+        """
+        Apply the ∀-rule (Universal Restriction).
+        Formal: If (∀R.C) ∈ L(x) and y is an R-successor of x and C ∉ L(y), then L(y) = L(y) ∪ {C}.
+        """
+        if label.role in node.successors:
+            changed = False
+            for successor in node.successors[label.role]:
+                if label.concept not in successor.labels:
+                    successor.labels.add(label.concept)
+                    changed = True
+            if changed:
+                for successor in node.successors[label.role]:
+                    if not self.expand(successor):
+                        return False
+        return None
+
+    def _apply_existential_rule(self, node: Node, existential: Existential) -> Optional[bool]:
+        """
+        Apply the ∃-rule (Existential Restriction).
+        Formal: If (∃R.C) ∈ L(x) and x has no R-successor y with C ∈ L(y), then create new y with L(y) = {C}.
+        """
+        exists_satisfied = False
+        if existential.role in node.successors:
+            for successor in node.successors[existential.role]:
+                if existential.concept in successor.labels:
+                    exists_satisfied = True
+                    break
+
+        if not exists_satisfied:
+            new_node = self.create_node(ancestor=node)
+            new_node.labels.add(existential.concept)
+            # Propagate existing ∀-restrictions to the new successor: L(y) = L(y) ∪ {D | (∀R.D) ∈ L(x)}
+            for label in node.labels:
+                match label:
+                    case Universal(role, concept) if role == existential.role:
+                        new_node.labels.add(concept)
+
+            if existential.role not in node.successors:
+                node.successors[existential.role] = []
+
+            node.successors[existential.role].append(new_node)
+
+            if not self.expand(new_node):
+                return False
+
+        return None
 
     def get_model(self, root: Optional[Node] = None) -> Dict[str, Any]:
         """
