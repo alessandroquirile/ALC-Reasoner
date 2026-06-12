@@ -21,6 +21,10 @@ class Node:
         self.labels: Set[Any] = set()
         self.successors: Dict[str, List['Node']] = {}
         self.blocked_by: Optional['Node'] = None
+        self.status: str = 'pending'
+        self.branch_successors: List['Node'] = []
+        self.failed_successors: Dict[str, List['Node']] = {}
+        self.original_id: str = identifier
 
     def has_clash(self) -> bool:
         """

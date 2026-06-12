@@ -30,7 +30,7 @@ class TestALCReasoner(unittest.TestCase):
         self.assertTrue(engine.check_satisfiability(A))
         model = engine.get_model()
         self.assertEqual(len(model["domain"]), 1)
-        self.assertIn(("x1", "x1"), model["roles"]["R"])
+        self.assertIn(("x0", "x0"), model["roles"]["R"])
 
     def test_universal_restriction(self):
         # Concept: (∀R.A) ⊓ (∃R.B) ⊓ (∀R.¬B)
@@ -51,8 +51,8 @@ class TestALCReasoner(unittest.TestCase):
         engine = TableauEngine(tbox=tbox)
         self.assertTrue(engine.check_satisfiability(Intersection(A, B)))
         model = engine.get_model()
-        self.assertIn("x1", model["domain"])
-        self.assertIn(("x1", "x1"), model["roles"]["R"])
+        self.assertIn("x0", model["domain"])
+        self.assertIn(("x0", "x0"), model["roles"]["R"])
 
     def test_top_and_bottom(self):
         # Top is always satisfiable

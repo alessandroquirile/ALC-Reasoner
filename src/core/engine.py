@@ -28,8 +28,8 @@ class TableauEngine:
         """
         Creates a new node in the tableau.
         """
-        self.node_count += 1
         node = Node(f"x{self.node_count}", ancestor)
+        self.node_count += 1
         if concept:
             node.labels.add(concept)
         for rule in self.tbox_rules:
@@ -51,9 +51,11 @@ class TableauEngine:
         Returns True if a clash-free completion exists.
         """
         if node.has_clash():
+            node.status = 'clashed'
             return False
 
         if node.is_blocked():
+            node.status = 'blocked'
             return True
 
         for label in list(node.labels):
@@ -70,8 +72,13 @@ class TableauEngine:
                     result = None
 
             if result is not None:
+                if not result:
+                    node.status = 'clashed'
+                else:
+                    node.status = 'satisfiable'
                 return result
 
+        node.status = 'satisfiable'
         return True
 
     def _apply_intersection_rule(self, node: Node, label: Intersection) -> Optional[bool]:
@@ -86,19 +93,34 @@ class TableauEngine:
 
     def _apply_union_rule(self, node: Node, label: Union) -> Optional[bool]:
         """
-        Apply the ⊔-rule (Non-deterministic Union).
-        Formal: If (C ⊔ D) ∈ L(x) and {C, D} ∩ L(x) = ∅, then L(x) = L(x) ∪ {C} or L(x) = L(x) ∪ {D}.
+        Apply the ⊔-rule (Non-deterministic Union) with visual forking.
+        Formal: If (C ⊔ D) ∈ L(x) and {C, D} ∩ L(x) = ∅, then create two branches.
         """
         if {label.left, label.right}.isdisjoint(node.labels):
-            orig_labels = node.labels.copy()
-            # Try C branch
-            node.labels.add(label.left)
-            if self.expand(node):
+            # Create left branch node
+            node_left = self.clone_node(node, f"{node.id}a")
+            node_left.labels.add(label.left)
+
+            # Create right branch node
+            node_right = self.clone_node(node, f"{node.id}b")
+            node_right.labels.add(label.right)
+
+            # Record them as branch successors of the parent node
+            node.branch_successors = [node_left, node_right]
+
+            # Expand left branch
+            left_res = self.expand(node_left)
+
+            # Expand right branch
+            right_res = self.expand(node_right)
+
+            # Set parent status based on branches
+            if left_res or right_res:
+                node.status = 'satisfiable'
                 return True
-            # Backtrack and try D branch
-            node.labels = orig_labels
-            node.labels.add(label.right)
-            return self.expand(node)
+            else:
+                node.status = 'clashed'
+                return False
         return None
 
     def _apply_universal_rule(self, node: Node, label: Universal) -> Optional[bool]:
@@ -113,8 +135,15 @@ class TableauEngine:
                     successor.labels.add(label.concept)
                     changed = True
             if changed:
-                for successor in node.successors[label.role]:
+                for successor in list(node.successors[label.role]):
                     if not self.expand(successor):
+                        node.successors[label.role].remove(successor)
+                        if not node.successors[label.role]:
+                            del node.successors[label.role]
+                        if label.role not in node.failed_successors:
+                            node.failed_successors[label.role] = []
+                        node.failed_successors[label.role].append(successor)
+                        successor.status = 'clashed'
                         return False
         return None
 
@@ -145,9 +174,61 @@ class TableauEngine:
             node.successors[existential.role].append(new_node)
 
             if not self.expand(new_node):
+                node.successors[existential.role].remove(new_node)
+                if not node.successors[existential.role]:
+                    del node.successors[existential.role]
+                if existential.role not in node.failed_successors:
+                    node.failed_successors[existential.role] = []
+                node.failed_successors[existential.role].append(new_node)
+                new_node.status = 'clashed'
                 return False
 
         return None
+
+    def clone_node(self, node: Node, new_id: str, new_ancestor: Optional[Node] = None,
+                   clone_map: Optional[dict] = None) -> Node:
+        """
+        Recursively clones a node and its descendants to fork the expansion tree,
+        updating ancestor links.
+        """
+        if clone_map is None:
+            clone_map = {}
+
+        ancestor = new_ancestor if new_ancestor is not None else node.ancestor
+        cloned = Node(new_id, ancestor)
+        cloned.original_id = node.original_id
+        cloned.labels = node.labels.copy()
+        cloned.status = node.status
+
+        # Map original node to cloned node
+        clone_map[node] = cloned
+
+        # Clone successors
+        for role, successors in node.successors.items():
+            cloned.successors[role] = []
+            for i, succ in enumerate(successors):
+                cloned_succ = self.clone_node(succ, f"{new_id}_{role}_{i}", new_ancestor=cloned, clone_map=clone_map)
+                cloned.successors[role].append(cloned_succ)
+
+        # Clone failed successors
+        for role, failed in node.failed_successors.items():
+            cloned.failed_successors[role] = []
+            for i, succ in enumerate(failed):
+                cloned_succ = self.clone_node(succ, f"{new_id}_failed_{role}_{i}", new_ancestor=cloned,
+                                              clone_map=clone_map)
+                cloned.failed_successors[role].append(cloned_succ)
+
+        # Clone branch successors
+        cloned.branch_successors = []
+        for i, succ in enumerate(node.branch_successors):
+            cloned_succ = self.clone_node(succ, f"{new_id}_branch_{i}", new_ancestor=cloned, clone_map=clone_map)
+            cloned.branch_successors.append(cloned_succ)
+
+        # Update blocked_by: if blocked_by is in clone_map, use the cloned version
+        if node.blocked_by:
+            cloned.blocked_by = clone_map.get(node.blocked_by, node.blocked_by)
+
+        return cloned
 
     def get_model(self, root: Optional[Node] = None) -> Dict[str, Any]:
         """
@@ -173,21 +254,29 @@ class TableauEngine:
             if node.blocked_by:
                 continue
 
-            domain.add(node.id)
+            # If node has branch successors, follow the satisfying branch
+            if node.branch_successors:
+                for succ in node.branch_successors:
+                    if succ.status != 'clashed':
+                        nodes_to_visit.append(succ)
+                        break  # Only follow one satisfying branch
+                continue
+
+            domain.add(node.original_id)
 
             for label in node.labels:
                 match label:
                     case AtomicConcept(name):
                         if name not in concept_interpretations:
                             concept_interpretations[name] = set()
-                        concept_interpretations[name].add(node.id)
+                        concept_interpretations[name].add(node.original_id)
 
             for role, successors in node.successors.items():
                 if role not in role_interpretations:
                     role_interpretations[role] = set()
                 for succ in successors:
-                    target_id = succ.blocked_by.id if succ.blocked_by else succ.id
-                    role_interpretations[role].add((node.id, target_id))
+                    target_id = succ.blocked_by.original_id if succ.blocked_by else succ.original_id
+                    role_interpretations[role].add((node.original_id, target_id))
                     if not succ.blocked_by:
                         nodes_to_visit.append(succ)
 
