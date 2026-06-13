@@ -18,7 +18,7 @@ $\mathcal{ALC}$ is a DL which extends basic concept languages ($\mathcal{AL}$) w
 
 Formal syntax:
 $$
-C, D ::= A\ |\ \top\ | \ \perp\ | \ \neg C\ | \ C \sqcap D\ | \ C \sqcup D\ | \ \exists R.C\ | \ \forall R.C
+C, D ::= 
 $$
 
 where $A$ is an atomic concept.
