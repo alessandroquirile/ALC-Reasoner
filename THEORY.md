@@ -45,7 +45,11 @@ Because the disjunction rule ($\sqcup$) is non-deterministic, the algorithm sear
 
 ### Blocking
 To ensure termination in the presence of cycles (e.g., TBox axioms like $C \sqsubseteq \exists R.C$), the algorithm uses blocking techniques, which detect if the tableau construction is repeating a state, thus preventing infinite expansion. A node $x_j$ is blocked by an ancestor $x_i$ if $x_i$ is an ancestor of $x_j$ and:
-$$ \mathcal{L}(x_j) \subseteq \mathcal{L}(x_i) $$
+
+$$
+\mathcal{L}(x_j) \subseteq \mathcal{L}(x_i)
+$$
+
 where $\mathcal{L}(x)$ denotes the set of concepts asserted at node $x$.
 
 ## Formal Properties and Complexity
