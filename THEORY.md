@@ -17,8 +17,9 @@ A DL knowledge base consists of:
 $\mathcal{ALC}$ is a DL which extends basic concept languages ($\mathcal{AL}$) with full negation, conjunction, disjunction, and existential/universal quantification.
 
 Formal syntax:
+
 $$
-C, D ::= 
+C, D =
 $$
 
 where $A$ is an atomic concept.
