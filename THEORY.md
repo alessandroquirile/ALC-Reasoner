@@ -3,14 +3,14 @@
 The goal of this project is to implement a satisfiability reasoner for $\mathcal{ALC}$ (Attributive Language with Complements) description logic using the tableau method.
 
 ## Why Description Logics?
-First-order logic (FOL) is highly expressive but generally undecidable. The Halting Problem, a fundamental result in theoretical computer science, implies that there is no general algorithm to decide the validity of an arbitrary FOL formula. This makes building automated reasoners for full FOL impractical for many applications.
+First-order logic (FOL) is highly expressive but generally undecidable. Classical results, such as the Church-Turing, show that validity for full FOL is undecidable, via reductions from the Halting Problem. This makes building automated reasoners for full FOL impractical for many applications.
 
 Description Logics (DLs) are fragments of FOL designed to be decidable. They provide a structured way to represent knowledge, balancing expressiveness and computational tractability.
 
 ## Knowledge Base Components
 A DL knowledge base consists of:
-* TBox (Terminological Box): Contains definitions of concepts (e.g., `Man ≡ Human ⊓ Male`).
-* RBox (Role Box): (Not explicitly used in basic $\mathcal{ALC}$) Contains axioms about roles (e.g., transitivity).
+* TBox (Terminological Box): Contains definitions of concepts (e.g., `Man ≡ Human ⊓ Male`). 
+* RBox (Role Box): Not part of standard $\mathcal{ALC}$, but present in more expressive description logics. It contains axioms about roles (e.g., transitivity).
 * ABox (Assertional Box): Contains assertions about individuals (e.g., `John : Man`).
 
 ## What is $\mathcal{ALC}$?
@@ -24,13 +24,13 @@ $$
 
 where $A$ is an atomic concept.
 
-$\mathcal{ALC}$ is more expressive than simpler DLs like $\mathcal{EL}$ (which lacks negation) but less expressive than full FOL because it restricts how quantifiers can be used (specifically, it doesn't allow arbitrary variable linking).
+$\mathcal{ALC}$ is more expressive than simpler DLs like $\mathcal{EL}$ (which lacks negation) but less expressive than full FOL because quantification is restricted to roles, and arbitrary first-order formulas with unrestricted variables cannot be expressed.
 
 ## Interpretations and Models
 An interpretation $\mathcal{I} = (\Delta^\mathcal{I}, \cdot^\mathcal{I})$ consists of a non-empty domain $\Delta^\mathcal{I}$ and an interpretation function $\cdot^\mathcal{I}$ that maps atomic concepts to subsets of $\Delta^\mathcal{I}$ and roles to binary relations on $\Delta^\mathcal{I} \times \Delta^\mathcal{I}$. A model for a knowledge base is an interpretation that satisfies all axioms in the TBox and ABox.
 
 ## The Tableau Method
-The tableau method checks satisfiability by constructing a model (or discovering a contradiction) through systematically decomposing concepts.
+The tableau method checks satisfiability by constructing a completion tree representing a candidate model, or by discovering a contradiction, through systematically decomposing concepts.
 
 ### Derivation Sequence
 The method constructs a sequence of completion trees $S_0 \to S_1 \to \dots \to S_n$, where:
@@ -44,7 +44,7 @@ A completion tree contains a clash if any of its nodes contains a contradiction 
 Because the disjunction rule ($\sqcup$) is non-deterministic, the algorithm searches a tree of alternative completion trees (search branches). The concept $C$ is satisfiable if and only if there exists at least one complete and clash-free completion tree $S_n$ derivable from $S_0$.
 
 ### Blocking
-To ensure termination in the presence of cycles (e.g., TBox axioms like $C \sqsubseteq \exists R.C$), the algorithm uses blocking techniques, which detect if the tableau construction is repeating a state, thus preventing infinite expansion. A node $x_j$ is blocked by an ancestor $x_i$ if $x_i$ is an ancestor of $x_j$ and:
+To ensure termination in the presence of cycles (e.g., TBox axioms like $C \sqsubseteq \exists R.C$), the algorithm uses subset blocking techniques, which detect if the tableau construction is repeating a state, thus preventing infinite expansion. A node $x_j$ is blocked by an ancestor $x_i$ if $x_i$ is an ancestor of $x_j$ and:
 
 $$
 \mathcal{L}(x_j) \subseteq \mathcal{L}(x_i)
@@ -60,4 +60,4 @@ The tableau method for $\mathcal{ALC}$ is:
 * Complete: If the input concept is satisfiable, then the tableau method is guaranteed to find at least one complete and clash-free completion tree.
 
 ### Complexity
-Concept satisfiability in $\mathcal{ALC}$ without a TBox (or with only acyclic TBoxes) is PSPACE-complete. However, when general TBoxes (GCIs) are permitted, concept satisfiability becomes EXPTIME-complete. Because this reasoner supports general TBoxes (necessitating blocking to handle cycles), the worst-case complexity of the problem it solves is EXPTIME-complete.
+Concept satisfiability in $\mathcal{ALC}$ without a TBox (or with only acyclic TBoxes) is PSPACE-complete. However, when general TBoxes (GCIs) are permitted, concept satisfiability becomes EXPTIME-complete. Since the reasoner targets $\mathcal{ALC}$ with general TBoxes, the underlying satisfiability problem it addresses is EXPTIME‑complete in the worst case.
