@@ -19,7 +19,7 @@ $\mathcal{ALC}$ is a DL which extends basic concept languages ($\mathcal{AL}$) w
 Formal syntax:
 
 $$
-C, D =
+C, D :: = 
 $$
 
 where $A$ is an atomic concept.
