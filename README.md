@@ -1,29 +1,50 @@
 # ALC-Reasoner
 
-An $\mathcal{ALC}$ (Attributive Language with Complements) satisfiability reasoner implemented using the tableau method. This project provides tools for reasoning about Description Logic knowledge bases, featuring lazy unfolding and blocking techniques to handle cycles.
+An $\mathcal{ALC}$ (Attributive Language with Complements) satisfiability reasoner implemented using the tableau method.
+
+This project provides tools for reasoning about Description Logic knowledge bases, featuring lazy unfolding and blocking
+techniques to handle cycles.
 
 ## Installation
 
-1. Clone this repository:
-   ```bash
-   git clone <repository-url>
-   cd ALC-Reasoner
-   ```
+Clone this repository, create and activate a virtual environment and install dependencies:
 
-2. Create and activate a virtual environment:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install .
-   ```
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
 ## Usage
 
-You can use the reasoner through the provided entry points. Example:
+The reasoner can be used by defining concepts and TBox axioms as strings. You can use both Unicode symbols and ASCII aliases:
+
+- Unicode: `⊓`, `⊔`, `¬`, `∃`, `∀`, `⊑`, `≡`
+- ASCII: `and`, `or`, `not`, `exists`, `forall`, `sub`, `eq`
+
+Example in `main.py`:
+
+```python3
+from src.core.parser import parse_concept, parse_tbox
+from src.core.engine import TableauEngine
+from src.utils.printer import pretty
+
+# Define concept and TBox using either symbols or ASCII aliases
+concept = parse_concept("Parent ⊓ Woman")
+tbox = parse_tbox("Parent ⊑ (Human ⊓ ∃hasChild.Human)")
+
+# Define the Tableau engine
+engine = TableauEngine(tbox)
+
+# Check SAT
+is_satisfiable = engine.check_satisfiability(concept)
+
+# Display the satisfying model (interpretation ℐ)
+if is_satisfiable: 
+    pretty(engine.get_model())
+```
+
+To run the example:
 
 ```bash
 python main.py
@@ -36,5 +57,8 @@ To run the test suite and verify the implementation:
 ```bash
 python -m unittest discover tests
 ```
+
 ## Theoretical Background
-For an in-depth explanation of Description Logics, $\mathcal{ALC}$, and the tableau method, please refer to [THEORY.md](THEORY.md).
+
+For an in-depth explanation of Description Logics, $\mathcal{ALC}$, and the tableau method, please refer
+to [THEORY.md](THEORY.md).

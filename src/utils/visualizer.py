@@ -1,5 +1,5 @@
-from typing import Set
 import os
+from typing import Set
 
 from src.core.node import Node
 
