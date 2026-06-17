@@ -41,7 +41,15 @@ engine = TableauEngine(tbox)
 is_satisfiable = engine.check_satisfiability(concept)
 
 # Display the satisfying model/interpretation
-if is_satisfiable: 
+if is_satisfiable:
+    # Model Interpretation (ℐ):
+        # Δᴵ (Domain): {x0}
+        # Concepts Interpretation (⋅ᴵ):
+            # Humanᴵ = {x0}
+            # Parentᴵ = {x0}
+            # Womanᴵ = {x0}
+        # Roles Interpretation (⋅ᴵ):
+            # hasChildᴵ = {(x0, x0)}
     pretty(engine.get_model())
 ```
 
