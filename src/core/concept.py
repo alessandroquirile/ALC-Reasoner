@@ -107,3 +107,46 @@ class Universal(Concept):
 
     def __repr__(self):
         return f"∀{self.role}.{self.concept}"
+
+
+@dataclass(frozen=True)
+class Axiom:
+    """Base class for TBox axioms."""
+
+    def internalize(self) -> Concept:
+        """Converts the axiom to its internalized concept representation in NNF."""
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class GCI(Axiom):
+    """
+    General Concept Inclusion: left ⊑ right
+    Internalized as: ¬left ⊔ right
+    """
+    left: Concept
+    right: Concept
+
+    def internalize(self) -> Concept:
+        return Union(Negation(self.left), self.right).to_nnf()
+
+    def __repr__(self):
+        return f"{self.left} ⊑ {self.right}"
+
+
+@dataclass(frozen=True)
+class Equivalence(Axiom):
+    """
+    Concept Equivalence: left ≡ right
+    Internalized as: (¬left ⊔ right) ⊓ (¬right ⊔ left)
+    """
+    left: Concept
+    right: Concept
+
+    def internalize(self) -> Concept:
+        c1 = Union(Negation(self.left), self.right)
+        c2 = Union(Negation(self.right), self.left)
+        return Intersection(c1, c2).to_nnf()
+
+    def __repr__(self):
+        return f"{self.left} ≡ {self.right}"

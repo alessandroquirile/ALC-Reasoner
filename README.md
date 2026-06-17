@@ -17,7 +17,8 @@ pip install -r requirements.txt
 
 ## Usage
 
-The reasoner can be used by defining concepts and TBox axioms as strings. You can use both Unicode symbols and ASCII aliases:
+The reasoner can be used by defining concepts and TBox axioms as strings. You can use both Unicode symbols and ASCII
+aliases:
 
 - Unicode: `⊓`, `⊔`, `¬`, `∃`, `∀`, `⊑`, `≡`
 - ASCII: `and`, `or`, `not`, `exists`, `forall`, `sub`, `eq`
@@ -39,7 +40,7 @@ engine = TableauEngine(tbox)
 # Check SAT
 is_satisfiable = engine.check_satisfiability(concept)
 
-# Display the satisfying model (interpretation ℐ)
+# Display the satisfying model/interpretation
 if is_satisfiable: 
     pretty(engine.get_model())
 ```

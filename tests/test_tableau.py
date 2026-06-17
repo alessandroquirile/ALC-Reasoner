@@ -1,6 +1,6 @@
 import unittest
 
-from src.core.concept import AtomicConcept, Intersection, Negation, Existential, Universal, Top, Bottom, Union
+from src.core.concept import AtomicConcept, Intersection, Negation, Existential, Universal, Top, Bottom, Union, GCI
 from src.core.engine import TableauEngine
 
 
@@ -25,7 +25,7 @@ class TestALCReasoner(unittest.TestCase):
         # TBox: A ⊑ ∃R.A
         # Concept: A
         A = AtomicConcept("A")
-        tbox = {Union(Negation(A), Existential("R", A))}
+        tbox = {GCI(A, Existential("R", A))}
         engine = TableauEngine(tbox=tbox)
         self.assertTrue(engine.check_satisfiability(A))
         model = engine.get_model()
@@ -47,7 +47,7 @@ class TestALCReasoner(unittest.TestCase):
         # Concept: A ⊓ B
         # TBox: A ⊑ ∃R.(A ⊓ B)
         A, B = AtomicConcept("A"), AtomicConcept("B")
-        tbox = {Union(Negation(A), Existential("R", Intersection(A, B)))}
+        tbox = {GCI(A, Existential("R", Intersection(A, B)))}
         engine = TableauEngine(tbox=tbox)
         self.assertTrue(engine.check_satisfiability(Intersection(A, B)))
         model = engine.get_model()

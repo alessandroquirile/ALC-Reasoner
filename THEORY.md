@@ -50,13 +50,16 @@ knowledge base is an interpretation that satisfies all axioms in the TBox and AB
 The tableau method checks satisfiability by constructing a completion tree representing a candidate model, or by
 discovering a contradiction, through systematically decomposing concepts.
 
-Before the tableau rules can be applied, the input concept must be converted into Negation Normal Form (NNF), where negation symbols ($\neg$) only appear immediately in front of atomic concepts. This ensures that the expansion rules can be applied consistently.
+Before the tableau rules can be applied, the input concept must be converted into Negation Normal Form (NNF), where
+negation symbols ($\neg$) only appear immediately in front of atomic concepts. This ensures that the expansion rules can
+be applied consistently.
 
 ### Derivation Sequence
 
 The method constructs a sequence of completion trees $S_0 \to S_1 \to \dots \to S_n$, where:
 
-* $S_0$ is the initial tree consisting of a single node $x_0$ with label $\mathcal{L}(x_0) = \{ C \}$, in other words $S_0 = \{ C(x_0) \}$.
+* $S_0$ is the initial tree consisting of a single node $x_0$ with label $\mathcal{L}(x_0) = \{ C \}$, in other
+  words $S_0 = \{ C(x_0) \}$.
 * Each step $S_i \to S_{i+1}$ applies an expansion rule, where $S_i = \{ \mathcal{A1}, ..., \mathcal{A_m} \}$
 * $S_n$ is a complete tree, meaning no further expansion rules can be applied.
 
@@ -73,9 +76,14 @@ completion tree $S_n$ derivable from $S_0$.
 ### Termination and Blocking
 
 The tableau method is guaranteed to terminate because the expansion rules are monotonous in nature:
-1. Accumulative Expansion: Rules add new concepts to nodes or add new edges and nodes to the tree, but they never remove existing concepts, nodes, or edges.
-2. Finite Search Space: The set of concepts that can appear on any node is finite and bounded by the set of sub-concepts of the initial concept $C$ (the closure of $C$).
-3. Blocking: To ensure termination in the presence of cycles (e.g., TBox axioms like $C \sqsubseteq \exists R.C$), the algorithm uses subset blocking techniques, which detect if the tableau construction is repeating a state, thus preventing infinite expansion. A node $x_j$ is blocked by an ancestor $x_i$ if $x_i$ is an ancestor of $x_j$ and:
+
+1. Accumulative Expansion: Rules add new concepts to nodes or add new edges and nodes to the tree, but they never remove
+   existing concepts, nodes, or edges.
+2. Finite Search Space: The set of concepts that can appear on any node is finite and bounded by the set of sub-concepts
+   of the initial concept $C$ (the closure of $C$).
+3. Blocking: To ensure termination in the presence of cycles (e.g., TBox axioms like $C \sqsubseteq \exists R.C$), the
+   algorithm uses subset blocking techniques, which detect if the tableau construction is repeating a state, thus
+   preventing infinite expansion. A node $x_j$ is blocked by an ancestor $x_i$ if $x_i$ is an ancestor of $x_j$ and:
 
 $$
 \mathcal{L}(x_j) \subseteq \mathcal{L}(x_i)
@@ -83,7 +91,8 @@ $$
 
 where $\mathcal{L}(x)$ denotes the set of concepts asserted at node $x$.
 
-These properties ensure that every branch of the completion tree construction reaches a state where either a clash is found or no further rules can be applied.
+These properties ensure that every branch of the completion tree construction reaches a state where either a clash is
+found or no further rules can be applied.
 
 ## Formal Properties and Complexity
 
@@ -98,7 +107,45 @@ The tableau method for $\mathcal{ALC}$ is:
 
 ### Complexity
 
-Concept satisfiability in $\mathcal{ALC}$ without a TBox (or with only acyclic TBoxes) is PSPACE-complete (NPSPACE-complete). However, when
+Concept satisfiability in $\mathcal{ALC}$ without a TBox (or with only acyclic TBoxes) is PSPACE-complete (
+NPSPACE-complete). However, when
 general TBoxes (GCIs) are permitted, concept satisfiability becomes EXPTIME-complete. Since the reasoner
-targets $\mathcal{ALC}$ with general TBoxes, the underlying satisfiability problem it addresses is EXPTIME‑complete in
+target $\mathcal{ALC}$ with general TBoxes, the underlying satisfiability problem it addresses is EXPTIME‑complete in
 the worst case.
+
+## Optimization: Lazy Unfolding
+
+General TBoxes are usually handled via internalization: every axiom $C \sqsubseteq D$ is converted
+into $\neg C \sqcup D$, and this concept is added to the label of every node in the tableau. This can lead to a massive
+search space due to the non-determinism of the disjunction rule ($\sqcup$).
+
+Lazy Unfolding is an optimization technique that exploits the Modus Ponens principle. It partitions the TBox $\tau$ into
+two sets:
+
+* $\tau_u$ (Unfoldable): Contains "simple" definitions of the form $A \equiv C$ or $A \sqsubseteq C$, where $A$ is an
+  atomic concept, $A$ is uniquely defined in $\tau_u$, and the definitions are acyclic.
+* $\tau_g$ (General): Contains all other axioms.
+
+### Partitioning Logic
+
+A TBox $\tau$ is partitioned such that:
+
+1. $\tau_u \cup \tau_g = \tau$
+2. If $(A \equiv C) \in \tau_u$ or $(A \sqsubseteq C) \in \tau_u$, then $A$ is an atomic concept.
+3. Each atomic concept $A$ appears at most once on the left-hand side of an axiom in $\tau_u$.
+4. $\tau_u$ is acyclic (no circular definitions).
+
+### Lazy Expansion Rules
+
+While $\tau_g$ is still handled via internalization, $\tau_u$ is handled using lazy rules that "unfold" the definition
+of $A$ only when necessary:
+
+* R1: If $A \in \mathcal{L}(x)$ and $(A \equiv C) \in \tau_u$ and $C \notin \mathcal{L}(x)$,
+  then $\mathcal{L}(x) = \mathcal{L}(x) \cup \{C\}$.
+* R2: If $\neg A \in \mathcal{L}(x)$ and $(A \equiv C) \in \tau_u$ and $\neg C \notin \mathcal{L}(x)$,
+  then $\mathcal{L}(x) = \mathcal{L}(x) \cup \{\neg C\}$.
+* R3: If $A \in \mathcal{L}(x)$ and $(A \sqsubseteq C) \in \tau_u$ and $C \notin \mathcal{L}(x)$,
+  then $\mathcal{L}(x) = \mathcal{L}(x) \cup \{C\}$.
+
+These rules are deterministic and avoid introducing non-deterministic branches unless the right-hand side $C$ itself
+contains disjunctions. This significantly reduces the number of "guessing" steps the reasoner must perform.

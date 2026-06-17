@@ -11,7 +11,10 @@ from src.core.concept import (
     Existential,
     Universal,
     Top,
-    Bottom
+    Bottom,
+    Axiom,
+    GCI,
+    Equivalence
 )
 
 # ALC Grammar in EBNF
@@ -90,12 +93,10 @@ class ALCTransformer(Transformer):
         return Universal(str(role), concept)
 
     def gci(self, left, right):
-        # C ⊑ D translates to ¬C ⊔ D
-        return Union(Negation(left), right)
+        return GCI(left, right)
 
     def equiv(self, left, right):
-        # C ≡ D translates to (¬C ⊔ D) and (¬D ⊔ C)
-        return [Union(Negation(left), right), Union(Negation(right), left)]
+        return Equivalence(left, right)
 
     def tbox(self, *axioms):
         flattened = []
@@ -127,7 +128,7 @@ def parse_concept(text: str) -> Concept:
         raise ParseError(f"Error parsing concept '{text}': {e}")
 
 
-def parse_tbox(text: str) -> Set[Concept]:
+def parse_tbox(text: str) -> Set[Axiom]:
     """
     Parses a multiline TBox string containing GCIs or Equivalences.
     """

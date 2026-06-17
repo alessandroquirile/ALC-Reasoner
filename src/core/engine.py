@@ -1,28 +1,123 @@
-from typing import Set, Dict, Any, Optional
+from typing import Set, Dict, Any, Optional, List
 
-from src.core.concept import Concept, AtomicConcept, Intersection, Union, Existential, Universal
+from src.core.concept import (
+    Concept,
+    AtomicConcept,
+    Intersection,
+    Union,
+    Negation,
+    Existential,
+    Universal,
+    Axiom,
+    GCI,
+    Equivalence
+)
 from src.core.node import Node
 
 
 class TableauEngine:
     """
-    ALC Tableau Reasoner Engine.
+    ALC Tableau Reasoner Engine with Lazy Unfolding optimization.
     
-    Implements expansion rules for:
-    - ⊓ (Intersection): Intersection(C, D)
-    - ⊔ (Union): Union(C, D)
-    - ∃ (Existential): Existential(R, C)
-    - ∀ (Universal): Universal(R, C)
-    - ¬ (Negation): Negation(C)
-    - ⊤ (Top): Top()
-    - ⊥ (Bottom): Bottom()
-    - TBox GCIs: C ⊑ D (handled via Union(Negation(C), D))
+    Lazy Unfolding partitions the TBox into:
+    - Tu (Unfoldable): Definitions of the form A ≡ C or A ⊑ C (A atomic, unique, acyclic).
+    - Tg (General): All other axioms.
+    
+    Expansion rules for:
+    - ⊓, ⊔, ∃, ∀, ¬, ⊤, ⊥
+    - Tg (General axioms): Handled via internalization.
+    - Tu (Unfoldable axioms): Handled via lazy rules R1, R2, R3.
     """
 
-    def __init__(self, tbox: Set[Concept]):
-        self.tbox_rules = {rule.to_nnf() for rule in tbox}
+    def __init__(self, tbox: Set[Axiom]):
+        self.tu_equiv: Dict[AtomicConcept, Concept] = {}  # A ≡ C
+        self.tu_incl: Dict[AtomicConcept, List[Concept]] = {}  # A ⊑ C
+        self.tg_internalized: Set[Concept] = set()
+
+        self._partition_tbox(tbox)
+
         self.node_count = 0
         self.root: Optional[Node] = None
+
+    def _partition_tbox(self, tbox: Set[Axiom]):
+        """
+        Partitions the TBox into Tu (unfoldable) and Tg (general).
+        Unicode: Tu ⊎ Tg = T
+        """
+        for axiom in tbox:
+            if isinstance(axiom, (GCI, Equivalence)) and isinstance(axiom.left, AtomicConcept):
+                # Try adding to Tu
+                lhs = axiom.left
+                if lhs not in self.tu_equiv and lhs not in self.tu_incl:
+                    # Potential candidate for Tu
+                    if isinstance(axiom, Equivalence):
+                        self.tu_equiv[lhs] = axiom.right.to_nnf()
+                    else:
+                        self.tu_incl[lhs] = [axiom.right.to_nnf()]
+
+                    if self._is_acyclic():
+                        continue  # Keep in Tu
+                    else:
+                        # Revert
+                        if isinstance(axiom, Equivalence):
+                            del self.tu_equiv[lhs]
+                        else:
+                            del self.tu_incl[lhs]
+
+            # If not suitable for Tu or causes cycle, add to Tg
+            self.tg_internalized.add(axiom.internalize())
+
+    def _is_acyclic(self) -> bool:
+        """Checks if the current Tu definitions are acyclic."""
+        adj = {}
+        all_lhs = set(self.tu_equiv.keys()) | set(self.tu_incl.keys())
+        for lhs in all_lhs:
+            rhs_concepts = []
+            if lhs in self.tu_equiv:
+                rhs_concepts.append(self.tu_equiv[lhs])
+            if lhs in self.tu_incl:
+                rhs_concepts.extend(self.tu_incl[lhs])
+
+            adj[lhs] = set()
+            for concept in rhs_concepts:
+                adj[lhs].update(self._get_atomic_concepts(concept) & all_lhs)
+
+        # Cycle detection using DFS
+        visited = set()
+        path = set()
+
+        def has_cycle(u):
+            visited.add(u)
+            path.add(u)
+            for v in adj.get(u, []):
+                if v not in visited:
+                    if has_cycle(v):
+                        return True
+                elif v in path:
+                    return True
+            path.remove(u)
+            return False
+
+        for node in adj:
+            if node not in visited:
+                if has_cycle(node):
+                    return False
+        return True
+
+    def _get_atomic_concepts(self, concept: Concept) -> Set[AtomicConcept]:
+        """Helper to extract all atomic concepts from a concept."""
+        atomics = set()
+        match concept:
+            case AtomicConcept():
+                atomics.add(concept)
+            case Negation(c):
+                atomics.update(self._get_atomic_concepts(c))
+            case Intersection(l, r) | Union(l, r):
+                atomics.update(self._get_atomic_concepts(l))
+                atomics.update(self._get_atomic_concepts(r))
+            case Existential(_, c) | Universal(_, c):
+                atomics.update(self._get_atomic_concepts(c))
+        return atomics
 
     def create_node(self, concept: Optional[Concept] = None, ancestor: Optional[Node] = None) -> Node:
         """
@@ -32,7 +127,7 @@ class TableauEngine:
         self.node_count += 1
         if concept:
             node.labels.add(concept)
-        for rule in self.tbox_rules:
+        for rule in self.tg_internalized:
             node.labels.add(rule)
         return node
 
@@ -58,6 +153,10 @@ class TableauEngine:
             node.status = 'blocked'
             return True
 
+        # Apply Lazy Unfolding rules (R1, R2, R3)
+        if self._apply_lazy_unfolding_rules(node):
+            return self.expand(node)
+
         for label in list(node.labels):
             match label:
                 case Intersection():
@@ -80,6 +179,39 @@ class TableauEngine:
 
         node.status = 'satisfiable'
         return True
+
+    def _apply_lazy_unfolding_rules(self, node: Node) -> bool:
+        """
+        Applies Lazy Unfolding rules:
+        R1: If A ∈ L(x), (A ≡ C) ∈ Tu, C ∉ L(x) then L(x) = L(x) ∪ {C}
+        R2: If ¬A ∈ L(x), (A ≡ C) ∈ Tu, ¬C ∉ L(x) then L(x) = L(x) ∪ {¬C}
+        R3: If A ∈ L(x), (A ⊑ C) ∈ Tu, C ∉ L(x) then L(x) = L(x) ∪ {C}
+        Returns True if any rule was applied.
+        """
+        changed = False
+        for label in list(node.labels):
+            match label:
+                case AtomicConcept() as a:
+                    # R1: A ∈ L(x) and (A ≡ C) ∈ Tu
+                    if a in self.tu_equiv:
+                        definition = self.tu_equiv[a]
+                        if definition not in node.labels:
+                            node.labels.add(definition)
+                            changed = True
+                    # R3: A ∈ L(x) and (A ⊑ C) ∈ Tu
+                    if a in self.tu_incl:
+                        for inclusion in self.tu_incl[a]:
+                            if inclusion not in node.labels:
+                                node.labels.add(inclusion)
+                                changed = True
+                case Negation(AtomicConcept() as a):
+                    # R2: ¬A ∈ L(x) and (A ≡ C) ∈ Tu
+                    if a in self.tu_equiv:
+                        neg_definition = Negation(self.tu_equiv[a]).to_nnf()
+                        if neg_definition not in node.labels:
+                            node.labels.add(neg_definition)
+                            changed = True
+        return changed
 
     def _apply_intersection_rule(self, node: Node, label: Intersection) -> Optional[bool]:
         """
@@ -284,5 +416,7 @@ class TableauEngine:
             "domain": domain,
             "concepts": concept_interpretations,
             "roles": role_interpretations,
-            "tbox": self.tbox_rules
+            "tu_equiv": self.tu_equiv,
+            "tu_incl": self.tu_incl,
+            "tg": self.tg_internalized
         }

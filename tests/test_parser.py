@@ -8,7 +8,9 @@ from src.core.concept import (
     Existential,
     Universal,
     Top,
-    Bottom
+    Bottom,
+    GCI,
+    Equivalence
 )
 from src.core.parser import parse_concept, parse_tbox, ParseError
 
@@ -112,14 +114,14 @@ class TestALCParser(unittest.TestCase):
         A = AtomicConcept("A")
         B = AtomicConcept("B")
 
-        # Inclusion (GCI): A ⊑ B (represented as ¬A ⊔ B)
-        expected_gci = {Union(Negation(A), B)}
+        # Inclusion (GCI): A ⊑ B
+        expected_gci = {GCI(A, B)}
         self.assertEqual(parse_tbox("A ⊑ B"), expected_gci)
         self.assertEqual(parse_tbox("A <= B"), expected_gci)
         self.assertEqual(parse_tbox("A sub B"), expected_gci)
 
-        # Equivalence: A ≡ B (represented as ¬A ⊔ B and ¬B ⊔ A)
-        expected_equiv = {Union(Negation(A), B), Union(Negation(B), A)}
+        # Equivalence: A ≡ B
+        expected_equiv = {Equivalence(A, B)}
         self.assertEqual(parse_tbox("A ≡ B"), expected_equiv)
         self.assertEqual(parse_tbox("A = B"), expected_equiv)
         self.assertEqual(parse_tbox("A eq B"), expected_equiv)
@@ -131,7 +133,7 @@ class TestALCParser(unittest.TestCase):
 
         # Multiple axioms separated by semicolon
         tbox = parse_tbox("A ⊑ B; B ⊑ C")
-        expected = {Union(Negation(A), B), Union(Negation(B), C)}
+        expected = {GCI(A, B), GCI(B, C)}
         self.assertEqual(tbox, expected)
 
         # Multiple axioms separated by newline
@@ -148,9 +150,8 @@ class TestALCParser(unittest.TestCase):
         B = AtomicConcept("B")
         C = AtomicConcept("C")
         expected = {
-            Union(Negation(A), B),
-            Union(Negation(B), C),
-            Union(Negation(C), B)
+            GCI(A, B),
+            Equivalence(B, C)
         }
         self.assertEqual(parse_tbox(tbox_text), expected)
 
